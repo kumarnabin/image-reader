@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Caption & Tags</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+        .upload-area {
+            border: 3px dashed #667eea;
+            padding: 50px;
+            text-align: center;
+            border-radius: 15px;
+            cursor: pointer;
+            background: white;
+            transition: background-color 0.3s ease;
+        }
+        .upload-area.dragover {
+            background: #e0e4ff;
+        }
+        .uploaded-image {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .caption-text {
+            font-size: 1.2rem;
+            margin-top: 15px;
+            font-style: italic;
+            color: #333;
+        }
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .tag {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: inline-block;
+            margin: 2px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .tag:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .descriptive-tag {
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: inline-block;
+            margin: 2px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .descriptive-tag:hover {
+            background: #1e8651;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .section-title {
+            font-weight: bold;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            font-size: 1.1rem;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .alternative-captions {
+            margin-top: 15px;
+        }
+        .alternative-captions p {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎨 AI Image Analyzer</h1>
+    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+    <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <img src="https://img.icons8.com/clouds/100/000000/upload.png" alt="Upload">
+        <h3>Drag & Drop your image here</h3>
+        <p>or click to browse files</p>
+    </div>
+    <div id="loading" style="display: none;">Analyzing image...</div>
+    <div id="result" style="display:none;">
+        <img id="previewImage" class="uploaded-image" alt="Uploaded image preview">
+        <div class="section-title">Caption:</div>
+        <div id="caption" class="caption-text"></div>
+        <div class="section-title">Tags:</div>
+        <div id="tags" class="tags-container"></div>
+        <div class="section-title" id="descriptive-title" style="display:none;">Descriptive Tags:</div>
+        <div id="descriptive-tags" class="tags-container"></div>
+        <div class="section-title" id="alternative-title" style="display:none;">Alternative Captions:</div>
+        <div class="alternative-captions" id="alternative-captions"></div>
+    </div>
+</div>
+<script>
+    // Get DOM elements
+    const fileInput = document.getElementById('fileInput');
+    const uploadArea = document.getElementById('uploadArea');
+    const result = document.getElementById('result');
+    const loading = document.getElementById('loading');
+    const caption = document.getElementById('caption');
+    const tags = document.getElementById('tags');
+    const descriptiveTags = document.getElementById('descriptive-tags');
+    const alternativeCaptions = document.getElementById('alternative-captions');
+    const previewImage = document.getElementById('previewImage');
+
+    // Event listeners
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            handleFile(e.target.files[0]);
+        }
+    });
+
+    async function handleFile(file) {
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file (JPEG, PNG, GIF, or WebP)');
+            return;
+        }
+        // Show loading state
+        loading.style.display = 'block';
+        result.style.display = 'none';
+        clearResults();
+        try {
+            // Create a preview of the image
+            const reader = new FileReader();
+            reader.onload = e => {
+                previewImage.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            // Create form data for the API request
+            const formData = new FormData();
+            formData.append('image', file);
+            // Send the image to the server for processing
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            if (!response.ok) {
+                throw new Error(`Error: ${response.statusText}`);
+            }
+            const data = await response.json();
+            // Display the results
+            displayResults(data);
+            // Show the result section
+            result.style.display = 'block';
+        } catch (error) {
+            console.error('Error processing image:', error);
+            alert(`Error processing image: ${error.message}`);
+        } finally {
+            // Hide loading indicator
+            loading.style.display = 'none';
+        }
+    }
+
+    function clearResults() {
+        caption.textContent = '';
+        tags.innerHTML = '';
+        descriptiveTags.innerHTML = '';
+        alternativeCaptions.innerHTML = '';
+        document.getElementById('descriptive-title').style.display = 'none';
+        document.getElementById('alternative-title').style.display = 'none';
+    }
+
+    function displayResults(data) {
+        loading.style.display = 'none';
+        // Display the main caption
+        caption.textContent = data.captions?.detailed || data.caption || 'No caption generated';
+        // Display tags
+        const tagsContainer = tags;
+        const tagList = data.seo_tags?.all || data.tags || [];
+        if (tagList.length === 0) {
+            const noTags = document.createElement('p');
+            noTags.textContent = 'No tags generated';
+            noTags.style.fontStyle = 'italic';
+            noTags.style.color = '#666';
+            tagsContainer.appendChild(noTags);
+        } else {
+            tagList.forEach(tag => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'tag';
+                tagElement.textContent = `#${tag.replace(/\s+/g, '_')}`;
+                tagElement.title = tag;
+                tagsContainer.appendChild(tagElement);
+            });
+        }
+        // Display descriptive tags
+        const descriptiveTagsContainer = descriptiveTags;
+        const descriptiveTagList = data.seo_tags?.descriptive || [];
+        if (descriptiveTagList.length > 0) {
+            document.getElementById('descriptive-title').style.display = 'block';
+            descriptiveTagList.forEach(tag => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'descriptive-tag';
+                tagElement.textContent = `#${tag.replace(/\s+/g, '_')}`;
+                tagElement.title = tag;
+                descriptiveTagsContainer.appendChild(tagElement);
+            });
+        }
+        // Show image analysis if available
+        if (data.image_analysis) {
+            const analysis = data.image_analysis;
+            const analysisText = document.createElement('div');
+            analysisText.className = 'caption-text';
+            analysisText.style.marginTop = '20px';
+            analysisText.innerHTML = `
+                <div><strong>Image Analysis:</strong></div>
+                <div>Dimensions: ${analysis.dimensions?.width} × ${analysis.dimensions?.height} pixels</div>
+                <div>Orientation: ${analysis.orientation}</div>
+                <div>Complexity: ${analysis.complexity}</div>
+            `;
+            result.appendChild(analysisText);
+        }
+        // Show alternative captions if available
+        if (data.captions?.alternatives?.length > 0) {
+            document.getElementById('alternative-title').style.display = 'block';
+            const altContainer = alternativeCaptions;
+            data.captions.alternatives.forEach((caption, index) => {
+                if (index < 3) { // Limit to 3 alternative captions
+                    const p = document.createElement('p');
+                    p.textContent = `${index + 1}. ${caption}`;
+                    altContainer.appendChild(p);
+                }
+            });
+        }
+    }
+</script>
+</body>
+</html>
